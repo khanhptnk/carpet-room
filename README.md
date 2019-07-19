@@ -12,7 +12,7 @@ By default the code runs reinforcement learning (actor-critic).
 $ python main.py
 ```
 
-To run imitation learning
+To run imitation learning (DAgger)
 
 ```
 $ python main.py -feedback action 
