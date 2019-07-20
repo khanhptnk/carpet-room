@@ -180,7 +180,6 @@ class Environment(object):
         reward = self._get_reward(new_pos)
 
         done = self.maze[new_pos[0]][new_pos[1]] == 'G'
-        #done = action == (0, 0)
 
         self.maze[self.agent_pos[0]][self.agent_pos[1]] = '.'
         self.agent_pos = new_pos

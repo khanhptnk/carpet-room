@@ -13,24 +13,28 @@ class Agent(object):
     def train(self, env):
         self.model.train()
 
+        # Reset environment
         ob = env.reset()
-        #env.render()
 
         best_reward = len(env.shortest_path(env.agent_pos, env.goal_pos)) + 20 - 2
 
         train_infos = []
 
         for _ in range(env.w + env.h):
+
+            # Predict action distribution based on observation
             logit = self.model(ob)
             self._mask_out_invalid_actions(logit, env)
             dist = logit.softmax(dim=0)
+
+            # Sample an action
             m = torch.distributions.categorical.Categorical(dist)
             action = m.sample()
+
+            # Take action and receive new observation
             ob, reward, feedback, done = env.step(action)
 
-            #env.render()
-
-
+            # Store information
             train_infos.append({
                     'ob'      : ob,
                     'logit'   : logit,
@@ -83,24 +87,29 @@ class ReinforceAgent(Agent):
     def train(self, env):
 
         train_infos, best_reward, done = super(ReinforceAgent, self).train(env)
+
         agent_reward = 0
         cum_reward = 0
         actor_loss = 0
         critic_loss = 0
+
+        # Loop reversely, from end point to start point
         for info in reversed(train_infos):
-
             agent_reward += info['reward']
-
             cum_reward += info['feedback']
             baseline_reward = self.model.predict_baseline(info['ob'])
             norm_reward = cum_reward - baseline_reward
+            logit = info['logit'].unsqueeze(0)
+            agent_action = info['action'].unsqueeze(0)
 
-            actor_loss += self.loss_fn(info['logit'].unsqueeze(0), info['action'].unsqueeze(0)) * \
-                norm_reward.detach()
+            # RL loss = cross entropy weighted by (normalized) reward
+            actor_loss += self.loss_fn(logit, agent_action) * norm_reward.detach()
+
             critic_loss += norm_reward ** 2
 
         self.loss = (actor_loss + critic_loss) / len(train_infos)
 
+        # Update model
         self.update()
 
         ep_info = {
@@ -128,15 +137,16 @@ class ImitateAgent(Agent):
         self.loss = 0
         agent_reward = 0
         for info in train_infos:
-
             agent_reward += info['reward']
-
             logit = info['logit'].unsqueeze(0)
             reference_action = torch.tensor(info['feedback'], dtype=torch.long).unsqueeze(0)
+
+            # IL loss = cross entropy
             self.loss += self.loss_fn(logit, reference_action)
 
         self.loss = self.loss / len(train_infos)
 
+        # Update model
         self.update()
 
         ep_info = {
