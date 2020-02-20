@@ -54,3 +54,18 @@ class ReinforceModel(nn.Module):
             ob = torch.tensor(ob, dtype=torch.float)
         return self.baseline_model(ob)
 
+
+class ActiveImitateModel(nn.Module):
+
+    def __init__(self, input_size, num_actions, model_class):
+
+        super(ActiveImitateModel, self).__init__()
+
+        self.exe_model = model_class(input_size, num_actions)
+        self.ask_model = model_class(input_size + num_actions, 2)
+
+    def __call__(self, ob):
+        return self.exe_model(ob)
+
+    def predict_ask(self, ob):
+        return self.ask_model(ob)

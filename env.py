@@ -73,6 +73,30 @@ class Environment(object):
             self.maze = copy.deepcopy(test_case['maze'])
             self.agent_pos = tuple(copy.deepcopy(test_case['agent_pos']))
             self.goal_pos = tuple(copy.deepcopy(test_case['goal_pos']))
+
+            """"
+            self.maze = []
+            for r in train_maze:
+                self.maze.append(list(r))
+
+            self.agent_pos = (0, 0)
+            self.maze[self.agent_pos[0]][self.agent_pos[1]] = 'O'
+
+            self.maze[self.goal_pos[0]][self.goal_pos[1]] = '.'
+            goal_pos = (self.h - 1, self.w - 1)
+            self.goal_pos = goal_pos
+            self.maze[goal_pos[0]][goal_pos[1]] = 'G'
+
+            for x in range(self.h):
+                for y in range(self.w):
+                    if self.maze[x][y] == '#':
+                        self.maze[x][y] = '.'
+
+            path = self.shortest_path(self.agent_pos, self.goal_pos)
+            for x, y in path:
+                if self.maze[x][y] not in ['O', 'G']:
+                    self.maze[x][y] = '#'
+            """
         else:
             self._reset_maze()
             self.agent_pos = (0, 0)
@@ -83,6 +107,10 @@ class Environment(object):
                     continue
                 if self.maze[goal_pos[0]][goal_pos[1]] != 'x':
                     break
+
+            """
+            goal_pos = (self.h - 1, self.w - 1)
+            """
             self.goal_pos = goal_pos
             self.maze[goal_pos[0]][goal_pos[1]] = 'G'
 
@@ -153,6 +181,9 @@ class Environment(object):
                     prev[new_pos[0]][new_pos[1]] = pos
 
         return None
+
+    def distance_to_goal(self):
+        return len(self.shortest_path(self.agent_pos, self.goal_pos))
 
     def _calculate_valid_actions(self):
         self.valid_action_indices = []
