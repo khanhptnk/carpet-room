@@ -1,7 +1,11 @@
 import os
 import sys
+import random
 
 class Teacher(object):
+
+    def __init__(self, args):
+        self.args = args
 
     def __call__(self, *args, **kwargs):
         pass
@@ -21,37 +25,52 @@ class RewardTeacher(Teacher):
 
 class ActionTeacher(Teacher):
 
-    def __call__(self, env, action):
-        # Find closes '#'
-        maze = env.maze
-        best_dist = 1e9
-        best_dest = None
+    K = 2
 
-        pos = env.agent_pos
+    def __init__(self, teacher_type):
+        self.teacher_type = teacher_type
+        #self.identity = 0
 
-        for i, r in enumerate(maze):
-            for j, c in enumerate(r):
-                if c == '#':
-                    path = env.shortest_path(pos, (i, j))
-                    dist = len(path)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_dest = (i, j)
+    def reset(self):
+        if 'two' in self.teacher_type:
+            self.identity = random.choice(range(self.K))
+            #self.identity = 1 - self.identity
 
-        if best_dest is None:
-            best_dest = env.goal_pos
+    def __call__(self, env):
 
-        path = env.shortest_path(pos, best_dest)
-        new_pos = path[1]
-        action = (new_pos[0] - pos[0], new_pos[1] - pos[1])
+        agent_pos = env.agent_pos
+        d = env.d
+        actions = []
+        for k, (i, j) in enumerate(env.action_space):
+            new_pos = (agent_pos[0] + i, agent_pos[1] + j)
+            if k not in env.valid_action_indices:
+                continue
+            if d[agent_pos] == d[new_pos] + 1:
+                actions.append(k)
 
-        for idx, a in enumerate(env.action_space):
-            if action == a:
-                return idx
+        if self.teacher_type == 'detm':
+            identity = 0
+            action = actions[0]
+        elif self.teacher_type == 'rand':
+            identity = 0
+            action = random.choice(actions)
+        elif self.teacher_type == 'twodifdetm':
+            identity = self.identity
+            if identity == 0:
+                action = actions[0]
+            else:
+                assert identity == 1
+                action = actions[-1]
+        else:
+            assert self.teacher_type == 'tworand'
+            identity = self.identity
+            action = random.choice(actions)
 
-        return None
+        feedback = { 'identity': identity,
+                     'action'  : action,
+                     'distance': d[agent_pos] }
+
+        return feedback
 
 
-    def _is_valid(self, env, pos):
-        return pos[0] >= 0 and pos[0] < env.h and pos[1] >= 0 and pos[1] < env.w \
-                and env.maze[pos[0]][pos[1]] != 'x'
+

@@ -5,7 +5,7 @@ import copy
 import json
 import numpy as np
 
-
+"""
 train_maze = [
     '..........',
     '...x.x....',
@@ -31,11 +31,22 @@ test_maze = [
     '..xx..xx..',
     '..........'
 ]
+"""
+
+train_maze = [
+    '.....',
+    '.....',
+    '.....',
+    '.....',
+    '.....'
+]
+
+test_maze = copy.deepcopy(train_maze)
 
 
 class Environment(object):
 
-    action_space = [(-1, 0), (0, 1), (1, 0), (0, -1)]
+    action_space = [(1, 0), (0, 1)]
     symbol_indices = { '.' : 0., 'x' : -1., 'O': 1., '#': 2., 'G': 3 }
 
     def __init__(self, mode, teacher, args):
@@ -50,6 +61,19 @@ class Environment(object):
         self.teacher = teacher
         self.args = args
 
+        self.reset()
+        self.reset_record()
+        self.d = self.shortest_path()
+
+    def reset_record(self):
+        self.nav_proba = [[0] * self.w for _ in range(self.h)]
+        self.query_count = [[0] * self.w for _ in range(self.h)]
+        self.query_proba = [[0] * self.w for _ in range(self.h)]
+        self.vis_count = [[0] * self.w for _ in range(self.h)]
+        self.intrinsic = [[0] * self.w for _ in range(self.h)]
+        self.extrinsic = [[0] * self.w for _ in range(self.h)]
+
+
     def input_size(self):
         return len(self.maze) * len(self.maze[0])
 
@@ -63,67 +87,14 @@ class Environment(object):
 
     def reset(self, test_id=None):
 
-        if test_id is not None:
-            if self.test_cases[test_id] is None:
-                with open('tests/' + self.mode + '/' + str(test_id) + '.json') as f:
-                    test_case = json.load(f)
-                    self.test_cases[test_id] = test_case
-            else:
-                test_case = self.test_cases[test_id]
-            self.maze = copy.deepcopy(test_case['maze'])
-            self.agent_pos = tuple(copy.deepcopy(test_case['agent_pos']))
-            self.goal_pos = tuple(copy.deepcopy(test_case['goal_pos']))
+        self._reset_maze()
 
-            """"
-            self.maze = []
-            for r in train_maze:
-                self.maze.append(list(r))
+        self.agent_pos = (0, 0)
+        self.maze[self.agent_pos[0]][self.agent_pos[1]] = 'O'
 
-            self.agent_pos = (0, 0)
-            self.maze[self.agent_pos[0]][self.agent_pos[1]] = 'O'
-
-            self.maze[self.goal_pos[0]][self.goal_pos[1]] = '.'
-            goal_pos = (self.h - 1, self.w - 1)
-            self.goal_pos = goal_pos
-            self.maze[goal_pos[0]][goal_pos[1]] = 'G'
-
-            for x in range(self.h):
-                for y in range(self.w):
-                    if self.maze[x][y] == '#':
-                        self.maze[x][y] = '.'
-
-            path = self.shortest_path(self.agent_pos, self.goal_pos)
-            for x, y in path:
-                if self.maze[x][y] not in ['O', 'G']:
-                    self.maze[x][y] = '#'
-            """
-        else:
-            self._reset_maze()
-            self.agent_pos = (0, 0)
-            self.maze[self.agent_pos[0]][self.agent_pos[1]] = 'O'
-            while True:
-                goal_pos = (random.randint(0, self.h - 1), random.randint(0, self.w - 1))
-                if goal_pos == self.agent_pos:
-                    continue
-                if self.maze[goal_pos[0]][goal_pos[1]] != 'x':
-                    break
-
-            """
-            goal_pos = (self.h - 1, self.w - 1)
-            """
-            self.goal_pos = goal_pos
-            self.maze[goal_pos[0]][goal_pos[1]] = 'G'
-
-            path = self.shortest_path(self.agent_pos, self.goal_pos)
-            for x, y in path:
-                if self.maze[x][y] not in ['O', 'G']:
-                    self.maze[x][y] = '#'
-
-        if self.args.no_carpet:
-            for r in self.maze:
-                for i in range(len(r)):
-                    if r[i] == '#':
-                        r[i] = '.'
+        goal_pos = (self.h - 1, self.w - 1)
+        self.goal_pos = goal_pos
+        self.maze[goal_pos[0]][goal_pos[1]] = 'G'
 
         self._calculate_valid_actions()
 
@@ -141,9 +112,6 @@ class Environment(object):
         for r in maze:
             self.maze.append(list(r))
 
-        if 'hard' in self.mode:
-            self.maze = np.tile(self.maze, (2,2)).tolist()
-
     def _get_ob(self):
         ob = []
         for r in self.maze:
@@ -151,39 +119,32 @@ class Environment(object):
                 ob.append(self.symbol_indices[c])
         return ob
 
-    def shortest_path(self, start_pos, goal_pos):
-        prev = []
-        for r in self.maze:
-            prev.append([None] * len(r))
+    def shortest_path(self):
+
+        d = {}
+
         queue = [None] * 1000
         start = 0
         end = 0
-        queue[end] = start_pos
+        queue[end] = self.goal_pos
         end += 1
-        prev[start_pos[0]][start_pos[1]] = -1
+
+        d[self.goal_pos] = 0
+
         while start < end:
             pos = queue[start]
             start += 1
-            if pos == goal_pos:
-                path = [pos]
-                while prev[pos[0]][pos[1]] != -1:
-                    pos = prev[pos[0]][pos[1]]
-                    path.append(pos)
-                return list(reversed(path))
 
             for i, j in self.action_space:
-                new_pos = (pos[0] + i, pos[1] + j)
+                new_pos = (pos[0] - i, pos[1] - j)
                 if new_pos[0] < 0 or new_pos[0] >= self.h or new_pos[1] < 0 or new_pos[1] >= self.w:
                     continue
-                if self.maze[new_pos[0]][new_pos[1]] != 'x' and prev[new_pos[0]][new_pos[1]] == None:
+                if self.maze[new_pos[0]][new_pos[1]] != 'x' and new_pos not in d:
                     queue[end] = new_pos
                     end += 1
-                    prev[new_pos[0]][new_pos[1]] = pos
+                    d[new_pos] = d[pos] + 1
 
-        return None
-
-    def distance_to_goal(self):
-        return len(self.shortest_path(self.agent_pos, self.goal_pos))
+        return d
 
     def _calculate_valid_actions(self):
         self.valid_action_indices = []
@@ -194,21 +155,13 @@ class Environment(object):
             if self.maze[new_pos[0]][new_pos[1]] != 'x':
                 self.valid_action_indices.append(k)
 
-    def _get_reward(self, pos):
-        if self.maze[pos[0]][pos[1]] == '#':
-            reward = 1
-        elif self.maze[pos[0]][pos[1]] == 'G':
-            reward = 20
-        else:
-            reward = 0
-        return reward
-
     def step(self, action_idx):
+
+        if action_idx == -1:
+            return self._get_ob(), False
+
         action = self.action_space[action_idx]
         new_pos = (self.agent_pos[0] + action[0], self.agent_pos[1] + action[1])
-        feedback = self.teacher(self, action)
-
-        reward = self._get_reward(new_pos)
 
         done = self.maze[new_pos[0]][new_pos[1]] == 'G'
 
@@ -218,4 +171,12 @@ class Environment(object):
 
         self._calculate_valid_actions()
 
-        return self._get_ob(), reward, feedback, done
+        return self._get_ob(), done
+
+    def record(self, query_action, uncertainty, query_prob, nav_prob):
+        self.query_count[self.agent_pos[0]][self.agent_pos[1]] += query_action
+        self.query_proba[self.agent_pos[0]][self.agent_pos[1]] += query_prob
+        self.vis_count[self.agent_pos[0]][self.agent_pos[1]] += 1
+        self.nav_proba[self.agent_pos[0]][self.agent_pos[1]] += nav_prob
+        self.intrinsic[self.agent_pos[0]][self.agent_pos[1]] += uncertainty['intrinsic']
+        self.extrinsic[self.agent_pos[0]][self.agent_pos[1]] += uncertainty['extrinsic']

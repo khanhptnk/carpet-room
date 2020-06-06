@@ -13,6 +13,7 @@ with open(filename) as f:
         for field in fields:
             #if 'Iter' in field:
             #    print(field.split(' ')[-1], end=' ')
+            print(fields)
             if metric_name in field:
                 print(field.split(' ')[-1])
 
